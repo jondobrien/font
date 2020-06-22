@@ -28,6 +28,21 @@ class Aitoc_Aitcg_Helper_Font extends Aitoc_Aitcg_Helper_Abstract
         
         return $optionsHtml;
     }
+    public function getFontOptionHtmlAdmin()
+    {
+        $collection = Mage::getModel('aitcg/font')
+                ->getCollection()
+                ->addFieldToFilter('filename', array('neq'=>''))
+                ->addFieldToFilter('status', '1');
+
+        $optionsHtml = '<option value="0">'.Mage::helper('aitcg')->__('Select font...').'</option>';
+        foreach ($collection->load() as $font)
+        {
+            $optionsHtml .= '<option value="'.$font->getFontId().'">' . $font->getName() . '</option>';
+        }
+
+        return $optionsHtml;
+    }
     
     public function getFontPreview($font)
     {
@@ -48,7 +63,7 @@ class Aitoc_Aitcg_Helper_Font extends Aitoc_Aitcg_Helper_Abstract
         return 'data:image/png;base64,'.base64_encode($image);
     }
     
-    public function getTextImage($font, $text, $color,$outline, $shadow)
+    public function getTextImage($font, $text, $color,$outline, $shadow, $angle = 0)
     {
         $resolution = $this->getResolution();
         $maxMargin = (int)($resolution * self::MARGIN_RESOLUTION_PERCENT / 100);
@@ -104,7 +119,21 @@ class Aitoc_Aitcg_Helper_Font extends Aitoc_Aitcg_Helper_Abstract
             $this->_imagettftextoutline($im, $resolution, 0, $X, $Y, $outlinecolor, $font, $text, $wightoutline);
 
         }
-        imagettftext($im, $resolution, 0, $X, $Y, $color, $font, $text);
+        $i = 1;
+        $lines = explode("\n", trim($text));
+        foreach($lines as $line)
+        {
+            $rowNumber = count($lines);
+            $move = $this->_addMove($resolution, $font, $line, $width);
+            imagettftext($im, $resolution, 0, $move, ($Y/$rowNumber)*$i, $color, $font, $line);
+            $i++;
+        }
+        
+        $im = imagerotate($im, -$angle, -1);
+        imagealphablending($im, true);
+        imagesavealpha($im, true);
+        
+        $im = $this->_cropWhiteSpace($im, $color);
 
         $path = Mage::getBaseDir('media') . DS . 'custom_product_preview' . DS . 'quote' . DS;
         $filename = $this->_getUniqueFilename($path);
@@ -115,6 +144,80 @@ class Aitoc_Aitcg_Helper_Font extends Aitoc_Aitcg_Helper_Abstract
         imagedestroy($im);
         file_put_contents($path.$filename, $image);
         return $filename;
+    }
+
+    protected function _cropWhiteSpace($img, $colorFont)
+    {
+        //find the size of the borders
+        $b_top = 0;
+        $b_btm = 0;
+        $b_lft = 0;
+        $b_rt = 0;
+
+        //top
+        for(; $b_top < imagesy($img); ++$b_top) {
+          for($x = 0; $x < imagesx($img); ++$x) {
+            $color = imagecolorat($img, $x, $b_top);//die();
+            //if($color != 0xFFFFFF && $color != -1 && $color != 2147483647) {
+            if($color == $colorFont) {
+            //var_dump($color);
+               break 2; //out of the 'top' loop
+            }
+          }
+        }
+
+        //bottom
+        for(; $b_btm < imagesy($img); ++$b_btm) {
+          for($x = 0; $x < imagesx($img); ++$x) {
+            $color = imagecolorat($img, $x,  imagesy($img) - $b_btm-1);//die();
+            //if($color != 0xFFFFFF && $color != -1 && $color != 2147483647) {
+            if($color == $colorFont) {
+            //var_dump($color);
+               break 2; //out of the 'bottom' loop
+            }
+          }
+        }
+
+        //left
+        for(; $b_lft < imagesx($img); ++$b_lft) {
+          for($y = 0; $y < imagesy($img); ++$y) {
+            $color = imagecolorat($img, $b_lft, $y);//die();
+            //if($color != 0xFFFFFF && $color != -1 && $color != 2147483647) {
+            if($color == $colorFont) {
+            //var_dump($color);
+               break 2; //out of the 'left' loop
+            }
+          }
+        }
+
+        //right
+        for(; $b_rt < imagesx($img); ++$b_rt) {
+          for($y = 0; $y < imagesy($img); ++$y) {
+            $color = imagecolorat($img, imagesx($img) - $b_rt-1, $y);//die();
+            //if($color != 0xFFFFFF && $color != -1 && $color != 2147483647) {
+            if($color == $colorFont) {
+            //var_dump($color);
+               break 2; //out of the 'right' loop
+            }
+          }
+        }
+
+        //copy the contents, excluding the border
+        $newimg = $this->_getEmptyImage(imagesx($img)-($b_lft+$b_rt), imagesy($img)-($b_top+$b_btm));
+        //$newimg = imagecreatetruecolor(imagesx($img)-($b_lft+$b_rt), imagesy($img)-($b_top+$b_btm));
+
+        imagecopy($newimg, $img, 0, 0, $b_lft, $b_top, imagesx($newimg), imagesy($newimg));
+        imagealphablending($newimg, true);
+        imagesavealpha($newimg, true);
+        return $newimg;        
+    }
+    
+    
+    protected function _addMove($resolution, $font, $line, $width)
+    {
+        $coords = imagettfbbox($resolution, 0, $font, $line);
+
+        return ($width - ($coords[2] - $coords[0])) / 2;
     }
 
     protected function _imagettftextoutline(&$im,$size,$angle,$x,$y, &$outlinecol,$fontfile,$text,$width) {
