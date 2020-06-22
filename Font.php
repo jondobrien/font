@@ -28,6 +28,21 @@ class Aitoc_Aitcg_Helper_Font extends Aitoc_Aitcg_Helper_Abstract
         
         return $optionsHtml;
     }
+    public function getFontOptionHtmlAdmin()
+    {
+        $collection = Mage::getModel('aitcg/font')
+                ->getCollection()
+                ->addFieldToFilter('filename', array('neq'=>''))
+                ->addFieldToFilter('status', '1');
+
+        $optionsHtml = '';
+        foreach ($collection->load() as $font)
+        {
+            $optionsHtml .= '<option value="'.$font->getFontId().'">' . $font->getName() . '</option>';
+        }
+
+        return $optionsHtml;
+    }
     
     public function getFontPreview($font)
     {
